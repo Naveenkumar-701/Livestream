@@ -380,8 +380,12 @@ import { Room, LocalVideoTrack, LocalAudioTrack } from "livekit-client";
 import { Box, Typography, Paper, TextField, Button } from "@mui/material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 
+// const LIVEKIT_WS = process.env.NEXT_PUBLIC_LIVEKIT_URL;
+// const API_BASE = "/api/livekit";
+
+
 const LIVEKIT_WS = process.env.NEXT_PUBLIC_LIVEKIT_URL;
-const API_BASE = "/api/livekit";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 export default function LiveRoom({ params }) {
     const router = useRouter();
