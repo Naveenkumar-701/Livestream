@@ -28,7 +28,7 @@ export default function LiveRoom({ params }) {
 
     /* ---------------------- NEW STATES FOR QUESTIONS ---------------------- */
     const questions = [
-        "Tell me about yourself Buddy?",
+        "Tell me about yourself?",
         "What are your strengths?",
         "What is your biggest weakness?",
         "Where do you see yourself in 5 years?",
