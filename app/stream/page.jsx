@@ -23,7 +23,8 @@ export default function CreateStream() {
         // Simulate small delay for smooth UX
         setTimeout(() => {
             router.push(
-                `/stream/room/${encodeURIComponent(roomName)}?name=${encodeURIComponent(name)}`
+                // `/stream/room/${encodeURIComponent(roomName)}?name=${encodeURIComponent(name)}`
+                `/stream/check-permissions?room=${encodeURIComponent(roomName)}&name=${encodeURIComponent(name)}`
             );
             setLoading(false);
         }, 1000);
