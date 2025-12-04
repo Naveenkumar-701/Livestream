@@ -1,3 +1,4 @@
+
 "use client";
 import React, { useEffect, useRef, useState, use } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -19,9 +20,19 @@ import SpeechRecognition, {
     useSpeechRecognition,
 } from "react-speech-recognition";
 import Lottie from "lottie-react";
+import { useDispatch, useSelector } from "react-redux";
+import {
+    addParentQuestion,          
+    addFollowUpQuestion,       
+    addToFollowupResponse,      
+    clearFollowupResponse,
+    setCurrentParentQuestion,
+    logParentCompletion,
+    saveLastQuestion,           
+    clearInterviewData,
+} from "../../../redux/interviewSlice.js"; 
+
 import "./page.css"
-import CameraWarning from "../../../component/CameraWarning";
-import { useCameraMonitor } from "../../../utils/CameraDetector";
 
 const LIVEKIT_WS = process.env.NEXT_PUBLIC_LIVEKIT_URL;
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
@@ -31,7 +42,7 @@ const EMPLOYER_PLANS = {
     growth: { name: "Growth", minutes: 2 },
     free_trial: { name: "Free Trial", minutes: 2 },
     business: { name: "Business", minutes: 2 },
-    enterprise: { name: "Enterprise", minutes: 10 }
+    enterprise: { name: "Enterprise", minutes: 20 }
 };
 
 // Function to determine question type
@@ -75,13 +86,13 @@ export default function LiveRoom({ params }) {
     const { room } = use(params);
     const search = useSearchParams();
     const name = search.get("name") || "guest";
-
     const planType = search.get("plan") || "enterprise";
 
-    // Camera detection states
-    const [showCameraWarning, setShowCameraWarning] = useState(false);
-    const [cameraWarningCount, setCameraWarningCount] = useState(0);
-    const cameraMonitorRef = useRef(null);
+    // Redux
+    const dispatch = useDispatch();
+    const { followupResponse, currentParentQuestion, isFollowUpMode } = useSelector(
+        (state) => state.interview
+    );
 
     // Follow-up states
     const [isInFollowUp, setIsInFollowUp] = useState(false);
@@ -193,24 +204,13 @@ export default function LiveRoom({ params }) {
         return questions[qIndex]?.type || "theory";
     };
 
-    // Camera monitoring handlers
-    const handleCameraWarning = (warningCount) => {
-        setCameraWarningCount(warningCount);
-        setShowCameraWarning(true);
-    };
-
-    const handleCameraStop = (reasonMessage, isManualStop) => {
-        stopEverything(reasonMessage, isManualStop);
-    };
-
-    // Initialize timer based on plan - FIXED: Only run once
+    // Initialize timer based on plan
     useEffect(() => {
         const plan = EMPLOYER_PLANS[planType] || EMPLOYER_PLANS.free_trial;
         const durationInSeconds = plan.minutes * 60;
         setTotalDuration(durationInSeconds);
         setTimeLeft(durationInSeconds);
 
-        // Only log initialization once
         console.log(`Timer initialized: ${plan.name} Plan - ${plan.minutes} minutes`);
 
         return () => {
@@ -223,7 +223,7 @@ export default function LiveRoom({ params }) {
         };
     }, [planType]);
 
-    // Timer countdown - FIXED: Better dependency management
+    // Timer countdown
     useEffect(() => {
         if (isStreaming && timeLeft > 0 && !isTimeUp) {
             timerRef.current = setInterval(() => {
@@ -245,7 +245,7 @@ export default function LiveRoom({ params }) {
         };
     }, [isStreaming, timeLeft, isTimeUp]);
 
-    // FIXED: Better time up handler with alert management
+    // Time up handler
     const handleTimeUp = () => {
         if (isTimeUp) return;
 
@@ -258,27 +258,21 @@ export default function LiveRoom({ params }) {
 
         const plan = EMPLOYER_PLANS[planType] || EMPLOYER_PLANS.free_trial;
 
-        // Clear any existing alert timeout
         if (alertTimeoutRef.current) {
             clearTimeout(alertTimeoutRef.current);
         }
 
-        // Show alert for current slot completion
         alertTimeoutRef.current = setTimeout(() => {
             const nextSlot = currentSlot + 1;
             console.log(`Slot ${currentSlot} completed. Starting Slot ${nextSlot}`);
-
-            // Log slot transition
             console.log(`Starting Slot ${nextSlot}: ${plan.minutes} minutes`);
 
             alert(`🔄 Slot ${currentSlot} completed! Starting Slot ${nextSlot}`);
 
-            // Start next slot after alert is dismissed
             setCurrentSlot(nextSlot);
             const newDuration = plan.minutes * 60;
             setTimeLeft(newDuration);
             setIsTimeUp(false);
-
         }, 100);
     };
 
@@ -300,9 +294,6 @@ export default function LiveRoom({ params }) {
         }
     }, [currentSlot]);
 
-    // Camera monitoring using the custom hook
-    useCameraMonitor(isStreaming, handleCameraWarning, handleCameraStop);
-
     // Update code when language changes
     useEffect(() => {
         if (showQuestions && questions.length > 0 && getCurrentQuestionType() === "programming") {
@@ -311,9 +302,6 @@ export default function LiveRoom({ params }) {
             setShowOutput(false);
         }
     }, [selectedLanguage]);
-
-    // Prevent tab switch
-    const tabSwitchAttempts = useRef(0);
 
     // Speech recognition
     const {
@@ -341,7 +329,7 @@ export default function LiveRoom({ params }) {
     const [output, setOutput] = useState("");
     const [testResults, setTestResults] = useState([]);
 
-    // Camera refs (keeping only for display, no detection)
+    // Camera refs
     const theoryCameraRef = useRef(null);
     const programmingCameraRef = useRef(null);
     const videoTrackRef = useRef(null);
@@ -352,19 +340,16 @@ export default function LiveRoom({ params }) {
             const currentQ = getCurrentQuestion();
 
             if (currentQ?.type === "programming") {
-                // Set language from question or default to javascript
                 if (currentQ.language && languageConfig[currentQ.language]) {
                     setSelectedLanguage(currentQ.language);
                 } else {
                     setSelectedLanguage("javascript");
                 }
 
-                // Set initial code for the selected language
                 setCode(languageConfig[selectedLanguage]?.initialCode || "");
                 setOutput("");
                 setShowOutput(false);
             } else {
-                // Reset transcript for theory questions
                 resetTranscript();
             }
         }
@@ -375,7 +360,7 @@ export default function LiveRoom({ params }) {
         const fetchQuestions = async () => {
             try {
                 setQuestionsLoading(true);
-                const response = await fetch('http://localhost:5000/api/interview/questions/692d501e3b7bfc5ced30bf12');
+                const response = await fetch('http://localhost:5000/api/interview/questions/69291ac03b7bfc5ced309c57');
                 const data = await response.json();
 
                 if (data.ok && data.questions) {
@@ -385,7 +370,6 @@ export default function LiveRoom({ params }) {
                         setJobTitle(data.job_title);
                     }
 
-                    // Check for follow-ups
                     transformedQuestions.forEach((q, index) => {
                         if (q.follow_up_questions && q.follow_up_questions.length > 0) {
                             console.log(`Question ${index + 1} has ${q.follow_up_questions.length} follow-up(s)`);
@@ -409,15 +393,13 @@ export default function LiveRoom({ params }) {
         fetchQuestions();
     }, []);
 
-    // Add this after the fetchQuestions useEffect (or next to other similar useEffects)
+    // Show questions when loaded and streaming
     useEffect(() => {
-        // when questions finish loading and the stream is live, show question UI
         if (!questionsLoading && isStreaming && questions.length > 0 && !showQuestions) {
             setShowQuestions(true);
             setQIndex(0);
         }
     }, [questionsLoading, isStreaming, questions.length, showQuestions]);
-
 
     // Update camera display when question type changes
     useEffect(() => {
@@ -438,12 +420,10 @@ export default function LiveRoom({ params }) {
             ? theoryCameraRef
             : programmingCameraRef;
 
-        // Attach to current camera
         if (currentCameraRef.current) {
             attachToElement(videoTrackRef.current, currentCameraRef.current);
         }
 
-        // Clear other camera
         if (otherCameraRef.current) {
             clearElement(otherCameraRef.current);
         }
@@ -585,10 +565,8 @@ Write print/println statements to show output here.`
         if (!element) return;
 
         try {
-            // Clear existing content
             clearElement(element);
 
-            // Attach new track
             const videoElement = track.attach();
             videoElement.muted = true;
             videoElement.playsInline = true;
@@ -710,6 +688,9 @@ Write print/println statements to show output here.`
 
     // Function to log Q&A in structured format
     const logQnA = (question, answer, startTime, endTime, isFollowUp = false, followUpIndex = null, isAIGenerated = false) => {
+
+        const displayIndex = isFollowUp ? (followUpIndex + 1) : 0;
+
         const logEntry = {
             questionType: determineQuestionType(question),
             question: question,
@@ -719,10 +700,20 @@ Write print/println statements to show output here.`
             slotNumber: currentSlot,
             isFollowUp: isFollowUp,
             isAIGenerated: isAIGenerated,
-            ...(isFollowUp && { followUpIndex: followUpIndex + 1 })
+            displayIndex: displayIndex,
+            ...(isFollowUp && {
+                followUpIndex: followUpIndex,
+                parentQuestionIndex: qIndex 
+            })
         };
 
-        console.log('ANSWER SAVED ---', logEntry);
+        console.log('ANSWER SAVED ---', {
+            index: displayIndex,
+            type: isFollowUp ? 'follow-up' : 'parent',
+            question: question?.substring(0, 50),
+            answer: answer?.substring(0, 50),
+            parent: isFollowUp ? `Q${qIndex + 1}` : null
+        });
 
         // Also save to questionLogs array
         setQuestionLogs((prev) => [...prev, logEntry]);
@@ -735,7 +726,7 @@ Write print/println statements to show output here.`
         if (forcedStopRef.current) return;
         forcedStopRef.current = true;
 
-        console.log("Stopping everything...");
+        console.log("Stopping everything - Saving last question...");
 
         try {
             if (screenStreamRef.current) {
@@ -744,17 +735,62 @@ Write print/println statements to show output here.`
             }
         } catch { }
 
-        // Save answer for current question (main or follow-up)
+        // 1. FIRST: Save the current/last question to Redux and local logs
         if (showQuestions && questions.length > 0) {
             const currentQ = getCurrentQuestion();
             const endTime = Date.now();
 
             if (currentQ) {
-                // Log based on question type
+                const currentAnswer = currentQ.type === "theory" ? transcript.trim() : (code || "No code submitted");
+
+                if (currentAnswer.trim() !== "") {
+                    console.log("💾 Saving last question before stopping...");
+
+                    // Save to Redux with proper indexing
+                    if (!isInFollowUp) {
+                        // Save as parent question (index 0)
+                        console.log(`💾 Last question: Parent Q${qIndex + 1} (Index 0)`);
+                        dispatch(
+                            addParentQuestion({
+                                questionIndex: qIndex,
+                                question: currentQ.text,
+                                answer: currentAnswer,
+                                quesType: currentQ.type === "programming" ? "coding" : "theory",
+                                language: selectedLanguage,
+                            })
+                        );
+                    } else {
+                        // Save as follow-up (index = currentFollowUpIndex + 1)
+                        console.log(`💾 Last question: Follow-up ${currentFollowUpIndex + 1} of Q${qIndex + 1}`);
+                        dispatch(
+                            addFollowUpQuestion({
+                                questionIndex: qIndex,
+                                followUpIndex: currentFollowUpIndex,
+                                question: currentQ.text,
+                                answer: currentAnswer,
+                                quesType: currentQ.type === "programming" ? "coding" : "theory",
+                                language: selectedLanguage,
+                            })
+                        );
+                    }
+
+                    // Also save to followupResponse for completeness
+                    dispatch(
+                        addToFollowupResponse({
+                            question: currentQ.text,
+                            candiAnswer: currentAnswer,
+                            quesType: currentQ.type === "programming" ? "coding" : "theory",
+                            language: selectedLanguage,
+                            followUpIndex: isInFollowUp ? currentFollowUpIndex : 0,
+                        })
+                    );
+                }
+
+                // 2. Log locally with proper follow-up index
                 if (currentQ.type === "theory") {
                     logQnA(
                         currentQ.text,
-                        transcript.trim(),
+                        currentAnswer,
                         currentAnswerStartTime,
                         endTime,
                         isInFollowUp,
@@ -764,7 +800,7 @@ Write print/println statements to show output here.`
                 } else if (currentQ.type === "programming") {
                     logQnA(
                         currentQ.text,
-                        code || "No code submitted",
+                        currentAnswer,
                         currentAnswerStartTime,
                         endTime,
                         isInFollowUp,
@@ -772,7 +808,18 @@ Write print/println statements to show output here.`
                         currentQ.isAIGenerated || false
                     );
                 }
+
+                // 3. Log parent completion if needed
+                if (isInFollowUp) {
+                    dispatch(logParentCompletion({
+                        questionIndex: qIndex,
+                        questionText: questions[qIndex]?.text,
+                        followUpCount: followUpQuestions.length
+                    }));
+                }
             }
+        } else {
+            console.log("⚠️ No active question to save before stopping");
         }
 
         try {
@@ -795,10 +842,7 @@ Write print/println statements to show output here.`
 
         setIsStreaming(false);
         setShowMicWarning(false);
-        setShowCameraWarning(false);
-        setCameraWarningCount(0);
 
-        // Clear timer
         if (timerRef.current) {
             clearInterval(timerRef.current);
         }
@@ -820,35 +864,75 @@ Write print/println statements to show output here.`
             })
             .catch(() => { });
 
-        // Log all collected answers before redirecting
+        // 4. Log all questions with proper indexing
         console.log("========= FINAL ALL QUESTION LOGS =========");
         console.log(`Total slots used: ${currentSlot}`);
+        console.log(`Total questions attempted: ${questionLogs.length}`);
+        console.log(`Current question index: Q${qIndex + 1}`);
+        console.log(`In follow-up mode: ${isInFollowUp}`);
+        console.log(`Current follow-up index: ${currentFollowUpIndex}`);
         console.log("===========================================");
 
+        // Group questions by parent for better readability
+        const groupedByParent = {};
         questionLogs.forEach((log, index) => {
-            console.log(`Question ${index + 1}:`, {
-                questionType: log.questionType,
-                question: log.question?.substring(0, 100) + (log.question?.length > 100 ? "..." : ""),
-                candAns: log.candAns?.substring(0, 100) + (log.candAns?.length > 100 ? "..." : ""),
-                startTime: log.startTime,
-                endTime: log.endTime,
-                duration: log.endTime - log.startTime,
-                slotNumber: log.slotNumber,
-                isFollowUp: log.isFollowUp,
-                isAIGenerated: log.isAIGenerated,
-                ...(log.isFollowUp && { followUpIndex: log.followUpIndex })
+            const parentKey = log.isFollowUp ? `Q${qIndex + 1}` : `Q${index + 1}`;
+
+            if (!groupedByParent[parentKey]) {
+                groupedByParent[parentKey] = [];
+            }
+
+            groupedByParent[parentKey].push({
+                index: log.isFollowUp ? log.followUpIndex : 0,
+                type: log.isFollowUp ? 'follow-up' : 'parent',
+                ...log
             });
         });
 
-        console.log("===========================================");
+        // Log grouped questions
+        Object.keys(groupedByParent).sort().forEach(parentKey => {
+            console.log(`\n${parentKey}:`);
+            const logs = groupedByParent[parentKey].sort((a, b) => a.index - b.index);
+
+            logs.forEach(log => {
+                const typeLabel = log.type === 'parent' ? 'PARENT' : `FOLLOW-UP ${log.index}`;
+                console.log(`  [${log.index}] ${typeLabel}: ${log.question?.substring(0, 80)}...`);
+                console.log(`      Answer: ${log.candAns?.substring(0, 80)}...`);
+                console.log(`      Type: ${log.questionType}, AI: ${log.isAIGenerated}, Duration: ${log.endTime - log.startTime}ms`);
+            });
+        });
+
+        console.log("\n===========================================");
+
+        // 5. Show final Redux log
+        console.log("🎯 Triggering final Redux log before clearing...");
+
+        // Small delay to ensure all logs are captured
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Clear Redux data (this will also log the final state)
+        dispatch(clearInterviewData());
+
+        // 6. Additional debug logging
+        console.log("📊 Final State Summary:");
+        console.log(`- Questions loaded: ${questions.length}`);
+        console.log(`- Questions answered: ${questionLogs.length}`);
+        console.log(`- Current Q Index: ${qIndex}`);
+        console.log(`- In Follow-up: ${isInFollowUp}`);
+        console.log(`- Follow-up Index: ${currentFollowUpIndex}`);
+        console.log(`- Follow-up Questions count: ${followUpQuestions.length}`);
+        console.log(`- Transcript length: ${transcript.length}`);
+        console.log(`- Code length: ${code.length}`);
 
         if (reasonMessage) {
             alert(reasonMessage);
         }
 
+        // Small delay before redirecting
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         router.push("/stream");
     };
-
     const handleBeforeUnload = (event) => {
         if (isStreaming) {
             event.preventDefault();
@@ -890,7 +974,7 @@ Write print/println statements to show output here.`
         };
     }, [room]);
 
-    // FIXED: Optimized screen share and egress sequence
+    // Screen share
     const startScreenShare = async (roomObj) => {
         try {
             console.log("Starting screen share...");
@@ -912,7 +996,6 @@ Write print/println statements to show output here.`
             mediaTracksRef.current.push(videoTrack);
 
             if (settings.displaySurface !== "monitor") {
-                // stop loader before prompting user again
                 try { videoTrack.stop(); } catch (e) { }
                 alert("Please select ENTIRE SCREEN");
                 setTimeout(() => startScreenShare(roomObj), 1000);
@@ -932,7 +1015,6 @@ Write print/println statements to show output here.`
             await roomObj.localParticipant.publishTrack(screenTrack);
             console.log("Full Screen Share Published");
 
-            // Start egress immediately after screen share is ready
             await startEgress(room);
         } catch (err) {
             console.error("Screen share error:", err);
@@ -977,11 +1059,9 @@ Write print/println statements to show output here.`
                 );
             };
 
-            // Create and store the video track
             const vTrack = new LocalVideoTrack(vTrackRaw);
             videoTrackRef.current = vTrack;
 
-            // Initially attach to theory camera (default)
             if (theoryCameraRef.current) {
                 attachToElement(vTrack, theoryCameraRef.current);
             }
@@ -1010,7 +1090,6 @@ Write print/println statements to show output here.`
             const aTrack = new LocalAudioTrack(micRaw);
             await r.localParticipant.publishTrack(aTrack);
 
-            // Start screen share which will then start egress
             await startScreenShare(r);
 
             const updateCount = () => {
@@ -1026,7 +1105,7 @@ Write print/println statements to show output here.`
         }
     };
 
-    // FIXED: Optimized egress start
+    // Egress start
     const startEgress = async (roomName) => {
         setEgressStarting(true);
         try {
@@ -1047,12 +1126,10 @@ Write print/println statements to show output here.`
 
                 setIsStreaming(true);
 
-                // Only show questions if we have them loaded
                 if (questions.length > 0) {
                     setShowQuestions(true);
                     setQIndex(0);
                 } else {
-                    // If questions still loading, we'll show them once loaded.
                     setShowQuestions(false);
                 }
 
@@ -1076,7 +1153,6 @@ Write print/println statements to show output here.`
                     console.error("Speech start error:", e);
                 }
 
-                // Show startup info after a short delay
                 setTimeout(() => {
                     const plan = getCurrentPlan();
                     console.log(`Interview started with ${plan.name} Plan`);
@@ -1096,7 +1172,6 @@ Interview will continue with unlimited slots until you click STOP.`);
         } finally {
             setEgressStarting(false);
 
-            // If questions are already fetched, show them now
             if (!questionsLoading && questions.length > 0) {
                 setShowQuestions(true);
                 setQIndex(0);
@@ -1104,69 +1179,115 @@ Interview will continue with unlimited slots until you click STOP.`);
         }
     };
 
-    // FIXED: Correct nextQuestion function with proper resetState placement
+    // UPDATED: nextQuestion function with Redux integration
     const nextQuestion = async () => {
-        // Prevent multiple clicks
-        if (isLoadingNext) return;
+    if (isLoadingNext) return;
+    setIsLoadingNext(true);
 
-        setIsLoadingNext(true);
+    const resetState = () => {
+        const newStart = Date.now();
+        setCurrentAnswerStartTime(newStart);
+        setCode("");
+        setOutput("");
+        setShowOutput(false);
+        resetTranscript();
+        lastVoiceTimeRef.current = newStart;
+        lastTranscriptRef.current = "";
+        setShowMicWarning(false);
+        setIsLoadingNext(false);
+    };
 
-        const resetState = () => {
-            const newStart = Date.now();
-            setCurrentAnswerStartTime(newStart);
-            setCode("");
-            setOutput("");
-            setShowOutput(false);
-            resetTranscript();
-            lastVoiceTimeRef.current = newStart;
-            lastTranscriptRef.current = "";
-            setShowMicWarning(false);
-            setIsLoadingNext(false); // Reset loading when state is reset
-        };
+    try {
+        const endTime = Date.now();
+        const currentQ = getCurrentQuestion();
 
-        try {
-            const endTime = Date.now();
-            const currentQ = getCurrentQuestion();
+        if (!currentQ) {
+            console.error("No current question found!");
+            setIsLoadingNext(false);
+            return;
+        }
 
-            if (!currentQ) {
-                console.error("No current question found!");
-                setIsLoadingNext(false);
-                return;
-            }
-
-            // 1. Log locally FIRST
-            if (currentQ.type === "theory") {
-                logQnA(
-                    currentQ.text,
-                    transcript.trim(),
-                    currentAnswerStartTime,
-                    endTime,
-                    isInFollowUp,
-                    currentFollowUpIndex,
-                    currentQ.isAIGenerated || false
+        // Get current answer
+        const currentAnswer = currentQ.type === "theory" ? transcript.trim() : code;
+        
+        // 1. Save to Redux with proper indexing
+        if (currentAnswer.trim() !== "") {
+            if (!isInFollowUp) {
+                // Save as parent question (index 0)
+                console.log(`💾 Saving Parent Q${qIndex + 1} (Index 0)`);
+                
+                dispatch(
+                    addParentQuestion({
+                        questionIndex: qIndex,
+                        question: currentQ.text,
+                        answer: currentAnswer,
+                        quesType: currentQ.type === "programming" ? "coding" : "theory",
+                        language: selectedLanguage,
+                    })
                 );
-            } else if (currentQ.type === "programming") {
-                logQnA(
-                    currentQ.text,
-                    code || "No code submitted",
-                    currentAnswerStartTime,
-                    endTime,
-                    isInFollowUp,
-                    currentFollowUpIndex,
-                    currentQ.isAIGenerated || false
+            } else {
+                // Save as follow-up (index = currentFollowUpIndex + 1)
+                console.log(`💾 Saving Follow-up ${currentFollowUpIndex + 1} of Q${qIndex + 1}`);
+                
+                // Make sure you're using the correct action name
+                dispatch(
+                    addFollowUpQuestion({
+                        questionIndex: qIndex,
+                        followUpIndex: currentFollowUpIndex,
+                        question: currentQ.text,
+                        answer: currentAnswer,
+                        quesType: currentQ.type === "programming" ? "coding" : "theory",
+                        language: selectedLanguage,
+                    })
                 );
             }
+        }
 
-            // 2. Check if we should generate AI follow-up
-            const shouldGenerateAI =
-                transcript.trim() !== "" || code.trim() !== "";
+        // 2. Also save to followupResponse for AI API
+        if (currentAnswer.trim() !== "") {
+            dispatch(
+                addToFollowupResponse({
+                    question: currentQ.text,
+                    candiAnswer: currentAnswer,
+                    quesType: currentQ.type === "programming" ? "coding" : "theory",
+                    language: selectedLanguage,
+                    followUpIndex: isInFollowUp ? currentFollowUpIndex : 0,
+                })
+            );
+        }
 
+        // 3. Log locally
+        if (currentQ.type === "theory") {
+            logQnA(
+                currentQ.text,
+                currentAnswer,
+                currentAnswerStartTime,
+                endTime,
+                isInFollowUp,
+                currentFollowUpIndex,
+                currentQ.isAIGenerated || false
+            );
+        } else if (currentQ.type === "programming") {
+            logQnA(
+                currentQ.text,
+                currentAnswer,
+                currentAnswerStartTime,
+                endTime,
+                isInFollowUp,
+                currentFollowUpIndex,
+                currentQ.isAIGenerated || false
+            );
+        }
+
+            // 4. Check for AI follow-up
+            const shouldGenerateAI = currentAnswer.trim() !== "";
             const currentAICount = followUpQuestions.filter(q => q.isAIGenerated).length;
             const maxAIFollowUps = 2;
 
             if (shouldGenerateAI && currentAICount < maxAIFollowUps) {
                 try {
                     console.log("📤 Calling AI for follow-up...");
+                    console.log("Payload followupResponse:", JSON.stringify(followupResponse, null, 2));
 
                     const aiResponse = await fetch(`http://localhost:5000/api/interview/generate-followup`, {
                         method: "POST",
@@ -1174,18 +1295,19 @@ Interview will continue with unlimited slots until you click STOP.`);
                         body: JSON.stringify({
                             interviewId: "692d501e3b7bfc5ced30bf12",
                             questionId: currentQ._id,
-                            answer: currentQ.type === "theory" ? transcript.trim() : code,
+                            questionText: currentQ.text,
+                            answer: currentAnswer,
                             questionType: currentQ.type === "programming" ? "coding" : "theory",
                             language: selectedLanguage,
-                            followUpIndex: isInFollowUp ? currentFollowUpIndex : 0
+                            followUpIndex: isInFollowUp ? currentFollowUpIndex : 0,
+                            followupResponse: followupResponse
                         })
                     });
 
                     if (aiResponse.ok) {
                         const result = await aiResponse.json();
-                        console.log("🤖 AI Follow-up Response:", result);
+                        console.log("🤖 AI Response:", result);
 
-                        // 3. If AI generated a follow-up question
                         if (result.ok && result.followUpQuestion) {
                             console.log("✅ AI Generated Follow-up:", result.followUpQuestion.question);
 
@@ -1198,16 +1320,15 @@ Interview will continue with unlimited slots until you click STOP.`);
                                 duration: result.followUpQuestion.duration || 180
                             };
 
-                            // Update UI IMMEDIATELY after getting AI response
                             if (!isInFollowUp) {
-                                console.log("Starting AI follow-up mode");
+                                console.log("🔄 Starting AI follow-up mode");
                                 setFollowUpQuestions([aiFollowUp]);
                                 setIsInFollowUp(true);
                                 setCurrentFollowUpIndex(0);
                                 resetState();
                                 return;
                             } else if (currentFollowUpIndex >= followUpQuestions.length - 1) {
-                                console.log("Adding AI follow-up to existing follow-ups");
+                                console.log("➕ Adding AI follow-up to existing follow-ups");
                                 setFollowUpQuestions(prev => [...prev, aiFollowUp]);
                                 resetState();
                                 return;
@@ -1216,16 +1337,19 @@ Interview will continue with unlimited slots until you click STOP.`);
                     }
                 } catch (error) {
                     console.error("AI follow-up failed:", error);
-                    setIsLoadingNext(false); // Reset on error
                 }
             }
 
-            // 4. Check for pre-existing DB follow-ups
+            // 5. Check for DB follow-ups
             if (!isInFollowUp) {
                 const mainQuestion = questions[qIndex];
 
                 if (mainQuestion?.follow_up_questions && mainQuestion.follow_up_questions.length > 0) {
-                    console.log(`Question ${qIndex + 1} has ${mainQuestion.follow_up_questions.length} follow-up(s) FROM DATABASE`);
+                    console.log(`📋 Question ${qIndex + 1} has ${mainQuestion.follow_up_questions.length} DB follow-up(s)`);
+
+                    // Clear followupResponse for new parent question
+                    dispatch(clearFollowupResponse());
+                    dispatch(setCurrentParentQuestion(qIndex));
 
                     const transformedFollowUps = mainQuestion.follow_up_questions.map(fq => ({
                         _id: fq._id,
@@ -1235,7 +1359,6 @@ Interview will continue with unlimited slots until you click STOP.`);
                         isAIGenerated: false
                     }));
 
-                    // Update UI IMMEDIATELY
                     setFollowUpQuestions(transformedFollowUps);
                     setIsInFollowUp(true);
                     setCurrentFollowUpIndex(0);
@@ -1244,45 +1367,64 @@ Interview will continue with unlimited slots until you click STOP.`);
                 }
             }
 
-            // 5. Handle existing follow-ups
+            // 6. Handle existing follow-ups
             if (isInFollowUp) {
                 if (currentFollowUpIndex < followUpQuestions.length - 1) {
-                    // Move to next follow-up - Update UI immediately
                     setCurrentFollowUpIndex(prev => prev + 1);
                     resetState();
                     return;
                 } else {
                     // All follow-ups completed
-                    console.log("All follow-ups completed");
+                    console.log(`✅ All follow-ups completed for Q${qIndex + 1}`);
+
+                    dispatch(logParentCompletion({
+                        questionIndex: qIndex,
+                        questionText: questions[qIndex]?.text,
+                        followUpCount: followUpQuestions.length
+                    }));
+
+                    // Clear for next parent question
+                    dispatch(clearFollowupResponse());
+
                     setIsInFollowUp(false);
                     setFollowUpQuestions([]);
                     setCurrentFollowUpIndex(0);
                 }
             }
 
-            // 6. Move to next main question or finish
+            // 7. Move to next main question or finish
             if (qIndex < questions.length - 1) {
+                // Set new parent question
+                dispatch(setCurrentParentQuestion(qIndex + 1));
+                dispatch(clearFollowupResponse());
                 setQIndex(prev => prev + 1);
                 resetState();
             } else {
+                // All questions completed
+                console.log("🎉 All questions completed - Last question saved");
+
+                // Save the final state
+                dispatch(logParentCompletion({
+                    questionIndex: qIndex,
+                    questionText: questions[qIndex]?.text,
+                    followUpCount: followUpQuestions.length
+                }));
+
                 setShowQuestions(false);
                 SpeechRecognition.stopListening();
                 setShowMicWarning(false);
                 setIsLoadingNext(false);
-                console.log("All questions completed");
             }
 
         } catch (error) {
             console.error("Error in nextQuestion:", error);
             setIsLoadingNext(false);
         } finally {
-            // Ensure loading is reset even if something fails
             if (isLoadingNext) {
                 setTimeout(() => setIsLoadingNext(false), 1000);
             }
         }
     };
-
 
     const stopEgress = async () => {
         await stopEverything("Live Stopped Successfully!", true);
@@ -1322,7 +1464,6 @@ Interview will continue with unlimited slots until you click STOP.`);
             const diff = Date.now() - lastVoiceTimeRef.current;
             const currentType = getCurrentQuestionType();
 
-            // Only check for theory questions
             if (currentType === "theory" && diff >= 10000) {
                 setShowMicWarning(true);
             }
@@ -1331,17 +1472,15 @@ Interview will continue with unlimited slots until you click STOP.`);
         return () => clearInterval(id);
     }, [isStreaming, showQuestions]);
 
-
+    // Set initial parent question when questions load
+    useEffect(() => {
+        if (showQuestions && questions.length > 0) {
+            dispatch(setCurrentParentQuestion(qIndex));
+        }
+    }, [showQuestions, qIndex, dispatch]);
 
     return (
         <Box className="interview-container">
-
-            {/* Camera Warning Modal */}
-            <CameraWarning 
-                open={showCameraWarning} 
-                onClose={() => setShowCameraWarning(false)}
-                warningCount={cameraWarningCount}
-            />
 
             {(egressStarting || (isStreaming && questionsLoading)) && (
                 <Box
@@ -1356,7 +1495,6 @@ Interview will continue with unlimited slots until you click STOP.`);
                         background: "rgba(0,0,0,0.85)"
                     }}
                 >
-                    {/* Lottie Animation Container */}
                     <Box
                         sx={{
                             width: "200px",
@@ -1374,7 +1512,6 @@ Interview will continue with unlimited slots until you click STOP.`);
                         />
                     </Box>
 
-                    {/* Loading Text */}
                     <Typography
                         sx={{
                             mt: 2,
@@ -1402,7 +1539,6 @@ Interview will continue with unlimited slots until you click STOP.`);
                         <Typography className="role-text">
                             {jobTitle || "Job Title"}
                         </Typography>
-
                     </Box>
 
                     <Box className="timer-section">
@@ -1421,7 +1557,6 @@ Interview will continue with unlimited slots until you click STOP.`);
                     </Box>
 
                     {/* Next / Stop Button */}
-
                     <Box className="next-question-section">
                         {isLoadingNext ? (
                             <Button className="next-question-btn" disabled>
@@ -1454,7 +1589,7 @@ Interview will continue with unlimited slots until you click STOP.`);
 
                 </Box>
 
-                {/* If questions not ready but showQuestions was requested, show friendly message (loader overlay normally covers this) */}
+                {/* If questions not ready but showQuestions was requested */}
                 {showQuestions && questions.length === 0 && !questionsLoading && (
                     <Box sx={{ p: 4 }}>
                         <Typography>Questions not available. Please try again.</Typography>
@@ -1476,7 +1611,6 @@ Interview will continue with unlimited slots until you click STOP.`);
                                         )}
                                     </Typography>
 
-                                    {/* Show AI badge if it's an AI-generated follow-up */}
                                     {isInFollowUp && followUpQuestions[currentFollowUpIndex]?.isAIGenerated && (
                                         <Typography
                                             sx={{
@@ -1496,7 +1630,6 @@ Interview will continue with unlimited slots until you click STOP.`);
                                         </Typography>
                                     )}
 
-                                    {/* Show DB badge if it's from database */}
                                     {isInFollowUp && !followUpQuestions[currentFollowUpIndex]?.isAIGenerated && (
                                         <Typography
                                             sx={{
@@ -1647,7 +1780,6 @@ Interview will continue with unlimited slots until you click STOP.`);
                                                 )}
                                             </Typography>
 
-                                            {/* AI badge for programming questions too */}
                                             {isInFollowUp && followUpQuestions[currentFollowUpIndex]?.isAIGenerated && (
                                                 <Typography
                                                     sx={{
@@ -1685,7 +1817,7 @@ Interview will continue with unlimited slots until you click STOP.`);
                     <Box className="camera-section">
                         <div ref={theoryCameraRef} className="camera-feed" />
 
-                        {/* ✅ MOBILE NEXT / SUBMIT BUTTONS */}
+                        {/* Mobile Next / Submit Buttons */}
                         <Box className="next-mobile-wrapper">
                             {questions.length > 0 && (
                                 isLoadingNext ? (
