@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Box, Button, Typography, Paper } from "@mui/material";
+import { Box, Button, Typography, Paper, CircularProgress } from "@mui/material";
 
 export default function CheckPermissions() {
     const router = useRouter();
@@ -12,8 +12,8 @@ export default function CheckPermissions() {
     const videoRef = useRef(null);
     const previewStreamRef = useRef(null);
 
-    const [camOK, setCamOK] = useState(false);
-    const [micOK, setMicOK] = useState(false);
+    const [camStatus, setCamStatus] = useState("checking"); // checking, success, error
+    const [micStatus, setMicStatus] = useState("checking"); // checking, success, error
     const [checking, setChecking] = useState(true);
 
     useEffect(() => {
@@ -22,9 +22,11 @@ export default function CheckPermissions() {
 
     const checkPermissions = async () => {
         setChecking(true);
+        setCamStatus("checking");
+        setMicStatus("checking");
 
         try {
-            // request and test stream
+            // Request camera and microphone access
             const testStream = await navigator.mediaDevices.getUserMedia({
                 video: true,
                 audio: true,
@@ -32,24 +34,36 @@ export default function CheckPermissions() {
 
             previewStreamRef.current = testStream;
 
-            // attach video
+            // Attach video preview
             if (videoRef.current) {
                 videoRef.current.srcObject = testStream;
                 videoRef.current.play();
             }
 
-            // check tracks
+            // Check tracks with a small delay to ensure they're working
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
             const vtrack = testStream.getVideoTracks()[0];
             const atrack = testStream.getAudioTracks()[0];
 
-            setCamOK(!!vtrack);
-            setMicOK(!!atrack);
+            // Simulate checking each device separately with a small delay
+            setTimeout(() => {
+                setCamStatus(vtrack?.readyState === "live" ? "success" : "error");
+            }, 300);
+
+            setTimeout(() => {
+                setMicStatus(atrack?.readyState === "live" ? "success" : "error");
+            }, 600);
 
         } catch (err) {
             console.error("Permission check error:", err);
+            setCamStatus("error");
+            setMicStatus("error");
+        } finally {
+            setTimeout(() => {
+                setChecking(false);
+            }, 800);
         }
-
-        setChecking(false);
     };
 
     const stopPreviewStream = () => {
@@ -68,10 +82,34 @@ export default function CheckPermissions() {
     };
 
     const goNext = () => {
-        // Stop test camera/mic BEFORE going to room
         stopPreviewStream();
-
         router.push(`/stream/room/${room}?name=${name}`);
+    };
+
+    const getStatusMessage = (status, device) => {
+        switch (status) {
+            case "checking":
+                return `Checking ${device}...`;
+            case "success":
+                return `✔ ${device} Working`;
+            case "error":
+                return `❌ ${device} Not Working`;
+            default:
+                return device;
+        }
+    };
+
+    const getStatusColor = (status) => {
+        switch (status) {
+            case "checking":
+                return "#f0b400"; // Yellow for checking
+            case "success":
+                return "#00ff9d"; // Green for success
+            case "error":
+                return "#ff4757"; // Red for error
+            default:
+                return "#ffffff";
+        }
     };
 
     return (
@@ -106,6 +144,7 @@ export default function CheckPermissions() {
                         borderRadius: 2,
                         bgcolor: "#000",
                         mb: 2,
+                        position: "relative",
                     }}
                 >
                     <video
@@ -118,28 +157,60 @@ export default function CheckPermissions() {
                         muted
                         playsInline
                     />
+                    
+                    {/* Loading overlay for video preview */}
+                    {camStatus === "checking" && (
+                        <Box
+                            sx={{
+                                position: "absolute",
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                display: "flex",
+                                justifyContent: "center",
+                                alignItems: "center",
+                                bgcolor: "rgba(0, 0, 0, 0.7)",
+                            }}
+                        >
+                            <CircularProgress sx={{ color: "#7b5de3" }} />
+                        </Box>
+                    )}
                 </Paper>
 
-                <Typography sx={{ color: camOK ? "#00ff9d" : "red", mb: 1 }}>
-                    {camOK ? "✔ Camera Detected" : "❌ Camera Not Working"}
-                </Typography>
+                {/* Camera Status */}
+                <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+                    <Typography sx={{ color: getStatusColor(camStatus), mr: 1 }}>
+                        {getStatusMessage(camStatus, "Camera")}
+                    </Typography>
+                    {camStatus === "checking" && (
+                        <CircularProgress size={16} sx={{ color: "#f0b400" }} />
+                    )}
+                </Box>
 
-                <Typography sx={{ color: micOK ? "#00ff9d" : "red", mb: 2 }}>
-                    {micOK ? "✔ Microphone Detected" : "❌ Microphone Not Working"}
-                </Typography>
+                {/* Microphone Status */}
+                <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                    <Typography sx={{ color: getStatusColor(micStatus), mr: 1 }}>
+                        {getStatusMessage(micStatus, "Microphone")}
+                    </Typography>
+                    {micStatus === "checking" && (
+                        <CircularProgress size={16} sx={{ color: "#f0b400" }} />
+                    )}
+                </Box>
 
                 <Button
                     variant="contained"
                     fullWidth
                     onClick={goNext}
-                    disabled={!camOK || !micOK || checking}
+                    disabled={camStatus !== "success" || micStatus !== "success" || checking}
                     sx={{
-                        bgcolor: (!camOK || !micOK) ? "#444" : "#7b5de3",
+                        bgcolor: (camStatus !== "success" || micStatus !== "success") ? "#444" : "#7b5de3",
                         "&:hover": { bgcolor: "#6a4eda" },
                         height: 42,
+                        mt: 1,
                     }}
                 >
-                    {checking ? "Checking..." : "Continue"}
+                    {checking ? "Checking Devices..." : "Continue to Room"}
                 </Button>
             </Paper>
         </Box>
