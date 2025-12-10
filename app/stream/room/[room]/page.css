@@ -787,7 +787,7 @@
     border: 1px solid #D9D9D9 !important;
     border-radius: 8px !important;
     overflow: auto !important;
-    min-height: 300px !important;
+    /* min-height: 300px !important; */
     background: white !important;
 }
 

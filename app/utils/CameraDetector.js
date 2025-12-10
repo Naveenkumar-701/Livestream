@@ -147,36 +147,102 @@ export async function isCameraOn() {
     }
 }
 
+// export function useCameraMonitor(isStreaming, onWarning, onStop) {
+//     const cameraCheckIntervalRef = React.useRef(null);
+//     const warningCountRef = React.useRef(0);
+
+//     const startMonitoring = () => {
+//         if (cameraCheckIntervalRef.current) {
+//             clearInterval(cameraCheckIntervalRef.current);
+//         }
+
+//         warningCountRef.current = 0;
+
+//         cameraCheckIntervalRef.current = setInterval(async () => {
+//             try {
+//                 const cameraStatus = await isCameraOn();
+
+//                 if (!cameraStatus.cameraOn || cameraStatus.cameraHidden || !cameraStatus.motionDetected) {
+//                     warningCountRef.current += 1;
+
+//                     if (warningCountRef.current >= 3) {
+//                         onStop?.("Camera not detected. Your interview has been interrupted.", true);
+//                         return;
+//                     }
+//                     onWarning?.(warningCountRef.current);
+//                 } else {
+//                     warningCountRef.current = 0;
+//                 }
+//             } catch (error) {
+//                 console.error("Camera check failed:", error);
+//             }
+//         }, 30000); 
+//     };
+
+//     const stopMonitoring = () => {
+//         if (cameraCheckIntervalRef.current) {
+//             clearInterval(cameraCheckIntervalRef.current);
+//             cameraCheckIntervalRef.current = null;
+//         }
+//         warningCountRef.current = 0;
+//     };
+
+//     React.useEffect(() => {
+//         if (isStreaming) {
+//             startMonitoring();
+//         } else {
+//             stopMonitoring();
+//         }
+
+//         return () => {
+//             stopMonitoring();
+//         };
+//     }, [isStreaming]);
+
+//     return {
+//         stopMonitoring,
+//         getWarningCount: () => warningCountRef.current,
+//         resetWarningCount: () => { warningCountRef.current = 0; }
+//     };
+// }
+
 export function useCameraMonitor(isStreaming, onWarning, onStop) {
     const cameraCheckIntervalRef = React.useRef(null);
-    const warningCountRef = React.useRef(0);
+    const warningShownRef = React.useRef(false);  // only 1 warning allowed
 
     const startMonitoring = () => {
         if (cameraCheckIntervalRef.current) {
             clearInterval(cameraCheckIntervalRef.current);
         }
 
-        warningCountRef.current = 0;
+        warningShownRef.current = false;
 
         cameraCheckIntervalRef.current = setInterval(async () => {
             try {
                 const cameraStatus = await isCameraOn();
 
-                if (!cameraStatus.cameraOn || cameraStatus.cameraHidden || !cameraStatus.motionDetected) {
-                    warningCountRef.current += 1;
+                const cameraIssue =
+                    !cameraStatus.cameraOn ||
+                    cameraStatus.cameraHidden ||
+                    !cameraStatus.motionDetected;
 
-                    if (warningCountRef.current >= 3) {
-                        onStop?.("Camera not detected. Your interview has been interrupted.", true);
-                        return;
+                if (cameraIssue) {
+                    if (!warningShownRef.current) {
+                        // FIRST TIME → show popup
+                        warningShownRef.current = true;
+                        onWarning?.(1);
+                    } else {
+                        // SECOND TIME → REDIRECT
+                        onStop?.(
+                            "Camera not detected. Your interview has been interrupted.",
+                            true
+                        );
                     }
-                    onWarning?.(warningCountRef.current);
-                } else {
-                    warningCountRef.current = 0;
                 }
             } catch (error) {
                 console.error("Camera check failed:", error);
             }
-        }, 30000); 
+        }, 30000);
     };
 
     const stopMonitoring = () => {
@@ -184,7 +250,7 @@ export function useCameraMonitor(isStreaming, onWarning, onStop) {
             clearInterval(cameraCheckIntervalRef.current);
             cameraCheckIntervalRef.current = null;
         }
-        warningCountRef.current = 0;
+        warningShownRef.current = false;
     };
 
     React.useEffect(() => {
@@ -194,14 +260,10 @@ export function useCameraMonitor(isStreaming, onWarning, onStop) {
             stopMonitoring();
         }
 
-        return () => {
-            stopMonitoring();
-        };
+        return () => stopMonitoring();
     }, [isStreaming]);
 
     return {
-        stopMonitoring,
-        getWarningCount: () => warningCountRef.current,
-        resetWarningCount: () => { warningCountRef.current = 0; }
+        stopMonitoring
     };
 }
