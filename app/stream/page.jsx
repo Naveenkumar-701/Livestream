@@ -150,21 +150,28 @@ export default function CreateStream() {
         setRoomName(generateSimpleId());
     }, []);
 
-    const handleCreate = () => {
-        if (!name.trim()) return alert("Enter your name");
-        if (!roomName.trim()) return alert("Room ID not generated");
-        
-        setLoading(true);
+    // In CreateStream.jsx or wherever you generate the room URL:
+const handleCreate = () => {
+    if (!name.trim()) return alert("Enter your name");
+    if (!roomName.trim()) return alert("Room ID not generated");
+    
 
-        setTimeout(() => {
-            router.push(
-                `/stream/check-permissions?room=${encodeURIComponent(
-                    roomName
-                )}&name=${encodeURIComponent(name)}`
-            );
-            setLoading(false);
-        }, 1000);
-    };
+    // const interviewId = "69291ac03b7bfc5ced309c57"; 
+    // const cid = "69291aa93b7bfc5ced309c02"; 
+
+    const interviewId = "692d501e3b7bfc5ced30bf12"; 
+    const cid = "692d4ff73b7bfc5ced30beac"; 
+    
+    
+    setLoading(true);
+
+    setTimeout(() => {
+        router.push(
+            `/stream/check-permissions?room=${encodeURIComponent(roomName)}&name=${encodeURIComponent(name)}&interviewId=${interviewId}&cid=${cid}`
+        );
+        setLoading(false);
+    }, 1000);
+};
 
     return (
         <Box
